@@ -5,6 +5,11 @@
       "Vtoday\\Shucang\\": "src/"
     }
   },
+  "require": {
+    "ext-json": "*",
+    "ext-openssl": "*"
+  },
+  "license": "MIT",
   "authors": [
     {
       "name": "Yongsheng Wei",
