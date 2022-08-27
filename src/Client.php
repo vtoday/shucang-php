@@ -158,19 +158,19 @@ class Client
     /**
      * 生成签名返回结果
      *
-     * @param $code
-     * @param $message
-     * @param $data
+     * @param string $code
+     * @param string $message
+     * @param array  $data
      *
      * @return array
      * @throws RuntimeException
      */
-    public function genSignResponse($code, $message, $data)
+    public function genSignResponse($code, $message, $method, $data = [])
     {
         $response = [
             "code"      => (string)$code,
             "message"   => (string)$message,
-            "app_id"    => $this->appId,
+            "method"    => $method,
             "timestamp" => (string)time(),
             "nonce"     => $this->nonce(),
             "data"      => "",
@@ -180,7 +180,7 @@ class Client
             $response["data"] = $this->encryptData($data);
         }
 
-        $response["sign"] = $this->generateSign($data);
+        $response["sign"] = $this->generateSign($response);
 
         return $response;
     }
@@ -237,7 +237,7 @@ class Client
             throw new ApiException("4004", "缺少业务参数data");
         }
 
-        if (time() - int($params["timestamp"]) > 600) {
+        if (time() - (int)($params["timestamp"]) > 600) {
             throw new ApiException("4008", "请求已过期");
         }
 
@@ -378,7 +378,7 @@ class Client
         ksort($data);
         $strs = [];
         foreach ($data as $k => $v) {
-            if ($k == "sign") {
+            if ($k == "sign" || empty($v)) {
                 continue;
             }
             $strs[] = "$k" . "=" . "$v";
