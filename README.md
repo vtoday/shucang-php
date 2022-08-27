@@ -49,8 +49,16 @@ try {
 try {
     $method = "";
     [$method, $data] = $client->parseRequestData();
- 
-     $bizData = [];
+
+    $bizData = [];
+
+    if ($method == "user.info") {
+        $bizData = [
+            "user_id" => "123", // 字符串类型
+            "wallet_address" => "xxxxxx",
+            "verify_sign" => "eeeeee",
+        ];
+    }
     // do something ......
 
     $response = $client->genSignResponse(\Vtoday\Shucang\Client::SUCCESS_CODE, "成功", $method, $bizData);
