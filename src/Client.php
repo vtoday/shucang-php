@@ -2,6 +2,7 @@
 
 use Vtoday\Shucang\Exceptions\ApiException;
 use Vtoday\Shucang\Exceptions\ConfigurationException;
+use Vtoday\Shucang\Exceptions\InvalidParamException;
 use Vtoday\Shucang\Exceptions\RuntimeException;
 
 class Client
@@ -88,8 +89,7 @@ class Client
      * @param $params
      *
      * @return array|string
-     * @throws ApiException
-     * @throws RuntimeException
+     * @throws InvalidParamException
      */
     public function doRequest($method, $params)
     {
@@ -98,26 +98,26 @@ class Client
 
         $data = json_decode($content, true);
         if (empty($data)) {
-            throw new ApiException("接口返回数据格式错误");
+            throw new InvalidParamException("接口返回数据格式错误");
         }
 
         $code = isset($data["code"]) ? $data["code"] : "";
         $message = isset($data["message"]) ? $data["message"] : "";
         if ($code == "") {
-            throw new ApiException("接口没有返回code码");
+            throw new InvalidParamException("接口没有返回code码");
         }
 
         if ($code != self::SUCCESS_CODE) {
-            throw new ApiException(sprintf("接口错误：code: %s, message: %s ", $code, $message));
+            throw new InvalidParamException(sprintf("接口错误：code: %s, message: %s ", $code, $message));
         }
 
         $sign = isset($data["sign"]) ? $data["sign"] : "";
         if ($sign == "") {
-            throw new ApiException("接口返回数据没有签名");
+            throw new InvalidParamException("接口返回数据没有签名");
         }
 
         if (!$this->verifySign($data)) {
-            throw new ApiException("接口返回值验证签名错误");
+            throw new InvalidParamException("接口返回值验证签名错误");
         }
 
         $bizData = isset($data["data"]) ? $data["data"] : "";
@@ -126,6 +126,122 @@ class Client
         }
 
         return $this->decryptData($bizData);
+    }
+
+    /**
+     * 获取接口请求数据
+     *
+     * @return array
+     * @throws ApiException
+     * @throws RuntimeException
+     */
+    public function parseRequestData()
+    {
+        $body = file_get_contents('php://input');
+
+        $params = $this->checkRequestBody($body);
+
+        if (!$this->verifySign($params)) {
+            throw new ApiException("3002", "签名校验失败");
+        }
+
+        $method = $params["method"];
+
+        $data = [];
+        if (!empty($params["data"])) {
+            $data = $this->decryptData($params["data"]);
+        }
+
+        return [$method, $data];
+    }
+
+    /**
+     * 生成签名返回结果
+     *
+     * @param $code
+     * @param $message
+     * @param $data
+     *
+     * @return array
+     * @throws RuntimeException
+     */
+    public function genSignResponse($code, $message, $data)
+    {
+        $response = [
+            "code"      => (string)$code,
+            "message"   => (string)$message,
+            "app_id"    => $this->appId,
+            "timestamp" => (string)time(),
+            "nonce"     => $this->nonce(),
+            "data"      => "",
+        ];
+
+        if (!empty($data)) {
+            $response["data"] = $this->encryptData($data);
+        }
+
+        $response["sign"] = $this->generateSign($data);
+
+        return $response;
+    }
+
+    /**
+     * 校验请求参数
+     *
+     * @param $body
+     *
+     * @return array
+     *
+     * @throws ApiException
+     */
+    private function checkRequestBody($body)
+    {
+        if (empty($body)) {
+            throw new ApiException("4000", "请求参数为空");
+        }
+
+        $params = json_decode($body, true);
+        if (json_last_error() != JSON_ERROR_NONE) {
+            throw new ApiException("4000", "请求参数非json格式");
+        }
+
+        if (empty($params)) {
+            throw new ApiException("4000", "请求参数解析为空");
+        }
+
+        if (empty($params["app_id"])) {
+            throw new ApiException("4001", "缺少参数app_id");
+        }
+
+        if ($params["app_id"] != $this->appId) {
+            throw new ApiException("4001", "app_id错误");
+        }
+
+        if (empty($params["sign"])) {
+            throw new ApiException("4002", "缺少参数sign");
+        }
+
+        if (empty($params["nonce"])) {
+            throw new ApiException("4003", "缺少参数nonce");
+        }
+
+        if (empty($params["timestamp"])) {
+            throw new ApiException("4007", "缺少参数timestamp");
+        }
+
+        if (empty($params["method"])) {
+            throw new ApiException("4006", "缺少参数method");
+        }
+
+        if (empty($params["data"])) {
+            throw new ApiException("4004", "缺少业务参数data");
+        }
+
+        if (time() - int($params["timestamp"]) > 600) {
+            throw new ApiException("4008", "请求已过期");
+        }
+
+        return $params;
     }
 
     /**
