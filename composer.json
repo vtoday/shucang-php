@@ -1,0 +1,14 @@
+{
+  "name": "vtoday/shucang",
+  "autoload": {
+    "psr-4": {
+      "Vtoday\\Shucang\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Yongsheng Wei",
+      "email": "yongshengmm@gmail.com"
+    }
+  ]
+}
