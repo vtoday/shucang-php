@@ -15,6 +15,12 @@ class Client
     const KEY_TYPE_PUBLIC = 1;
     const KEY_TYPE_PRIVATE = 2;
 
+    //RSA不同的密钥长度，在分段加、解密时，分段字节数是不同的
+    //若RSA密钥长度为M bit，分段加密字节数为(M/8-11)，分段解密字节数为（M/8）。
+    //2048bit：分段加密字节数为245，分段解密字节数为256。
+    const RSA_ENCRYPT_BLOCK_SIZE = 245;
+    const RSA_DECRYPT_BLOCK_SIZE = 256;
+
     /**
      * 应用私钥
      *
@@ -160,7 +166,7 @@ class Client
      *
      * @param string $code
      * @param string $message
-     * @param array  $data
+     * @param array $data
      *
      * @return array
      * @throws RuntimeException
@@ -168,12 +174,12 @@ class Client
     public function genSignResponse($code, $message, $method, $data = [])
     {
         $response = [
-            "code"      => (string)$code,
-            "message"   => (string)$message,
-            "method"    => $method,
+            "code" => (string)$code,
+            "message" => (string)$message,
+            "method" => $method,
             "timestamp" => (string)time(),
-            "nonce"     => $this->nonce(),
-            "data"      => "",
+            "nonce" => $this->nonce(),
+            "data" => "",
         ];
 
         if (!empty($data)) {
@@ -285,10 +291,10 @@ class Client
     private function getRequestBody($method, $params)
     {
         $request = [
-            "app_id"    => $this->appId,
+            "app_id" => $this->appId,
             "timestamp" => (string)time(),
-            "nonce"     => $this->nonce(),
-            "method"    => $method,
+            "nonce" => $this->nonce(),
+            "method" => $method,
         ];
 
         $request["data"] = $this->encryptData($params);
@@ -308,8 +314,15 @@ class Client
      */
     public function encryptData($data)
     {
-        if (openssl_public_encrypt(json_encode($data), $encrypted, $this->todayPublicKey) === false) {
-            throw new RuntimeException("加密data数据失败");
+        $content = json_encode($data);
+
+        $encrypted = "";
+        $blocks = str_split($content, self::RSA_ENCRYPT_BLOCK_SIZE);
+        foreach ($blocks as $block) {
+            if (openssl_public_encrypt($block, $blockEncrypted, $this->todayPublicKey) === false) {
+                throw new RuntimeException("加密data数据失败");
+            }
+            $encrypted .= $blockEncrypted;
         }
 
         return base64_encode($encrypted);
@@ -325,11 +338,19 @@ class Client
      */
     public function decryptData($data)
     {
-        if (openssl_private_decrypt(base64_decode($data), $encrypted, $this->appPrivateKey) === false) {
-            throw new RuntimeException("解密data数据失败");
+        $content = base64_decode($data);
+        $blocks = str_split($content, self::RSA_DECRYPT_BLOCK_SIZE);
+
+        $decrypted = "";
+        foreach ($blocks as $block) {
+            if (openssl_private_decrypt($block, $blockDecrypted, $this->appPrivateKey) === false) {
+                throw new RuntimeException("解密data数据失败");
+            }
+
+            $decrypted .= $blockDecrypted;
         }
 
-        return json_decode($encrypted, true);
+        return json_decode($decrypted, true);
     }
 
     /**
@@ -402,7 +423,7 @@ class Client
      * Convert one line key to standard format
      *
      * @param string $key
-     * @param int    $type
+     * @param int $type
      *
      * @return string
      */
